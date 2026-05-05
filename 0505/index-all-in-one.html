@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>垃圾分類助手</title>
+    <!-- TensorFlow.js 和模型 -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2"></script>
+    <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Microsoft YaHei', '微軟正黑體', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 10px;
+    color: #333;
+}
+
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* 頭部 */
+.header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 30px 20px;
+    text-align: center;
+}
+
+.header h1 {
+    font-size: 32px;
+    margin-bottom: 10px;
+}
+
+.header p {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+/* 導航標籤 */
+.tab-navigation {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+    overflow-x: auto;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 15px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: #666;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    position: relative;
+}
+
+.tab-btn:hover {
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.tab-btn.active {
+    color: #667eea;
+}
+
+.tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+}
+
+/* 頁面內容 */
+.tab-content {
+    display: none;
+    padding: 20px;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* 搜尋容器 */
+.search-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 12px 15px;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.search-btn {
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.2s ease;
+}
+
+.search-btn:active {
+    transform: scale(0.95);
+}
+
+/* 搜尋結果 */
+.search-results {
+    margin-bottom: 20px;
+    min-height: 50px;
+}
+
+.result-card {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-left: 5px solid #667eea;
+}
+
+.result-card:hover {
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+    transform: translateX(5px);
+}
+
+.result-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.result-category {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 5px;
+}
+
+.category-recyclable {
+    background: #4CAF50;
+}
+
+.category-compostable {
+    background: #FF9800;
+}
+
+.category-general {
+    background: #2196F3;
+}
+
+.category-hazardous {
+    background: #F44336;
+}
+
+.result-description {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.5;
+}
+
+/* 快速搜尋 */
+.quick-search {
+    margin-top: 20px;
+}
+
+.quick-search h3 {
+    font-size: 16px;
+    margin-bottom: 12px;
+    color: #333;
+}
+
+.quick-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.quick-btn {
+    padding: 12px;
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    transition: all 0.3s ease;
+}
+
+.quick-btn:hover {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.quick-btn:active {
+    transform: scale(0.95);
+}
+
+/* 分類網格 */
+.categories-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+}
+
+.category-card {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.category-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+    transform: translateY(-5px);
+}
+
+.category-icon {
+    font-size: 40px;
+    margin-bottom: 10px;
+}
+
+.category-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.category-count {
+    font-size: 12px;
+    color: #999;
+}
+
+/* 歷史紀錄 */
+.history-container {
+    padding-bottom: 20px;
+}
+
+.clear-btn {
+    width: 100%;
+    padding: 12px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    margin-bottom: 15px;
+    transition: background 0.3s ease;
+}
+
+.clear-btn:hover {
+    background: #d32f2f;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.history-item {
+    background: #f8f9fa;
+    padding: 12px 15px;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    animation: slideInLeft 0.3s ease-out;
+}
+
+@keyframes slideInLeft {
+    from {
+        transform: translateX(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.history-text {
+    flex: 1;
+}
+
+.history-name {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 3px;
+}
+
+.history-time {
+    font-size: 12px;
+    color: #999;
+}
+
+.history-delete {
+    background: white;
+    border: none;
+    color: #f44336;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    transition: background 0.3s ease;
+}
+
+.history-delete:hover {
+    background: #ffebee;
+}
+
+.empty-message {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+    font-size: 16px;
+}
+
+/* AI 分類容器 */
+.ai-container {
+    padding: 10px 0;
+}
+
+.ai-container h3 {
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.ai-controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.ai-btn {
+    padding: 12px 15px;
+    border: 2px dashed #667eea;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: #667eea;
+    transition: all 0.3s ease;
+}
+
+.ai-btn:hover {
+    border-style: solid;
+    background: rgba(102, 126, 234, 0.2);
+    transform: translateY(-2px);
+}
+
+.ai-btn:active {
+    transform: translateY(0);
+}
+
+/* 相機容器 */
+.camera-container {
+    background: #000;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 15px;
+    position: relative;
+}
+
+#cameraVideo {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.camera-controls {
+    display: flex;
+    gap: 10px;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.8);
+    justify-content: center;
+}
+
+.btn-capture,
+.btn-close-camera,
+.btn-clear {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+    transition: all 0.3s ease;
+}
+
+.btn-capture {
+    background: #4CAF50;
+    color: white;
+    flex: 1;
+}
+
+.btn-capture:hover {
+    background: #45a049;
+}
+
+.btn-close-camera,
+.btn-clear {
+    background: #f44336;
+    color: white;
+    flex: 0.5;
+}
+
+.btn-close-camera:hover,
+.btn-clear:hover {
+    background: #da190b;
+}
+
+/* 圖片預覽 */
+.image-preview {
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 15px;
+    background: #f5f5f5;
+    position: relative;
+}
+
+#previewImage {
+    width: 100%;
+    height: auto;
+    max-height: 300px;
+    object-fit: contain;
+    display: block;
+}
+
+/* AI 結果 */
+.ai-results {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 15px;
+}
+
+.ai-results h4 {
+    color: #667eea;
+    margin-bottom: 15px;
+}
+
+.ai-results h5 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+/* 加載動畫 */
+.loading-spinner {
+    text-align: center;
+    padding: 30px 20px;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #667eea;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 預測分類結果 */
+.predicted-category {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.predicted-category h5 {
+    color: white;
+    margin-bottom: 5px;
+    font-size: 16px;
+}
+
+.predicted-category p {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+    margin: 0;
+}
+
+/* 預測概率柱狀圖 */
+.prediction-bars {
+    margin-bottom: 15px;
+}
+
+.probability-bar {
+    margin-bottom: 12px;
+}
+
+.bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 4px;
+    color: #555;
+}
+
+.bar-label-name {
+    font-weight: 600;
+}
+
+.bar-label-percent {
+    color: #667eea;
+    font-weight: 600;
+}
+
+.bar-container {
+    background: #e9ecef;
+    border-radius: 6px;
+    overflow: hidden;
+    height: 24px;
+}
+
+.bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    padding-right: 6px;
+    transition: width 0.5s ease;
+}
+
+/* 結果詳情 */
+.result-details {
+    background: white;
+    border-left: 4px solid #667eea;
+    padding: 12px;
+    border-radius: 5px;
+}
+
+.result-details p {
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 0;
+    color: #555;
+}
+
+/* 錯誤消息 */
+.error-message {
+    background: #ffebee;
+    border-left: 4px solid #f44336;
+    padding: 12px;
+    border-radius: 5px;
+    color: #c62828;
+    font-size: 13px;
+}
+
+/* 響應式 AI */
+@media (max-width: 480px) {
+    .ai-controls {
+        grid-template-columns: 1fr;
+    }
+    
+    .camera-controls {
+        flex-wrap: wrap;
+    }
+    
+    .btn-close-camera,
+    .btn-clear {
+        flex: 1;
+    }
+}
+
+/* 彈窗 */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    animation: fadeIn 0.3s ease;
+}
+
+.modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.close-modal {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    font-size: 28px;
+    font-weight: bold;
+    color: #999;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.close-modal:hover {
+    color: #333;
+}
+
+#modalBody h2 {
+    color: #667eea;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#modalBody p {
+    line-height: 1.6;
+    margin-bottom: 10px;
+    color: #555;
+}
+
+#modalBody .tips {
+    background: #f0f4ff;
+    border-left: 4px solid #667eea;
+    padding: 12px 15px;
+    border-radius: 5px;
+    margin-top: 15px;
+    font-size: 13px;
+}
+
+#modalBody .tips strong {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+#modalBody .items-list {
+    margin: 15px 0;
+    padding: 0 15px;
+}
+
+#modalBody .items-list li {
+    margin-bottom: 8px;
+    color: #555;
+}
+
+/* 響應式設計 */
+@media (max-width: 480px) {
+    .header h1 {
+        font-size: 24px;
+    }
+
+    .header {
+        padding: 20px 15px;
+    }
+
+    .tab-content {
+        padding: 15px;
+    }
+
+    .categories-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-buttons {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .search-input {
+        font-size: 16px;
+    }
+
+    .modal-content {
+        max-width: 95%;
+        padding: 20px;
+    }
+}
+
+@media (max-width: 360px) {
+    .tab-btn {
+        font-size: 12px;
+        padding: 12px 8px;
+    }
+
+    .quick-buttons {
+        grid-template-columns: 1fr;
+    }
+
+    .search-container {
+        flex-direction: column;
+    }
+
+    .search-btn {
+        width: 100%;
+    }
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 頭部 -->
+        <header class="header">
+            <div class="header-content">
+                <h1>♻️ 垃圾分類助手</h1>
+                <p>讓我們一起做好環保</p>
+            </div>
+        </header>
+
+        <!-- 導航標籤 -->
+        <nav class="tab-navigation">
+            <button class="tab-btn active" data-tab="search">
+                🔍 搜尋分類
+            </button>
+            <button class="tab-btn" data-tab="ai-classify">
+                🤖 AI 識別
+            </button>
+            <button class="tab-btn" data-tab="categories">
+                📋 分類清單
+            </button>
+            <button class="tab-btn" data-tab="history">
+                📊 查詢紀錄
+            </button>
+        </nav>
+
+        <!-- 搜尋分類頁面 -->
+        <section id="search-tab" class="tab-content active">
+            <div class="search-container">
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    class="search-input" 
+                    placeholder="輸入垃圾名稱，例如：紙箱、寶特瓶..."
+                >
+                <button id="searchBtn" class="search-btn">搜尋</button>
+            </div>
+
+            <div class="search-results" id="searchResults"></div>
+
+            <div class="quick-search">
+                <h3>常見物品快速搜尋</h3>
+                <div class="quick-buttons">
+                    <button class="quick-btn" data-item="寶特瓶">寶特瓶</button>
+                    <button class="quick-btn" data-item="紙箱">紙箱</button>
+                    <button class="quick-btn" data-item="電池">電池</button>
+                    <button class="quick-btn" data-item="食物殘渣">食物殘渣</button>
+                    <button class="quick-btn" data-item="玻璃瓶">玻璃瓶</button>
+                    <button class="quick-btn" data-item="塑膠袋">塑膠袋</button>
+                    <button class="quick-btn" data-item="舊衣物">舊衣物</button>
+                    <button class="quick-btn" data-item="熒光燈">熒光燈</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- AI 識別頁面 -->
+        <section id="ai-classify-tab" class="tab-content">
+            <div class="ai-container">
+                <h3>📸 垃圾 AI 識別</h3>
+                <p style="font-size: 13px; color: #666; margin-bottom: 15px;">上傳圖片或使用相機拍照，AI 將自動分析垃圾分類和預測概率</p>
+                
+                <div class="ai-controls">
+                    <button id="uploadBtn" class="ai-btn upload-btn">
+                        📤 上傳圖片
+                    </button>
+                    <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                    
+                    <button id="cameraBtn" class="ai-btn camera-btn">
+                        📷 開啟相機
+                    </button>
+                </div>
+
+                <!-- 相機容器 -->
+                <div id="cameraContainer" class="camera-container" style="display: none;">
+                    <video id="cameraVideo" playsinline></video>
+                    <div class="camera-controls">
+                        <button id="captureBtn" class="btn-capture">拍照</button>
+                        <button id="closeCameraBtn" class="btn-close-camera">關閉</button>
+                    </div>
+                </div>
+
+                <!-- 圖片預覽 -->
+                <div id="imagePreview" class="image-preview" style="display: none;">
+                    <img id="previewImage" alt="預覽">
+                    <button id="clearImageBtn" class="btn-clear">清除</button>
+                </div>
+
+                <!-- AI 分析結果 -->
+                <div id="aiResults" class="ai-results" style="display: none;">
+                    <h4>🤖 AI 分析結果</h4>
+                    
+                    <!-- 加載動畫 -->
+                    <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>正在分析圖片...</p>
+                    </div>
+
+                    <!-- 分類結果 -->
+                    <div id="classificationResult" style="display: none;">
+                        <div class="predicted-category">
+                            <h5 id="predictedCategoryName"></h5>
+                            <p id="predictedCategoryDesc"></p>
+                        </div>
+
+                        <!-- 預測概率 -->
+                        <div class="prediction-bars">
+                            <h5>預測概率分析</h5>
+                            <div id="probabilityBars"></div>
+                        </div>
+
+                        <!-- 詳細信息 -->
+                        <div class="result-details">
+                            <h5>處理方法</h5>
+                            <p id="recycleTips"></p>
+                        </div>
+                    </div>
+
+                    <!-- 錯誤消息 -->
+                    <div id="errorMessage" class="error-message" style="display: none;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 分類清單頁面 -->
+        <section id="categories-tab" class="tab-content">
+            <div class="categories-grid" id="categoriesGrid"></div>
+        </section>
+
+        <!-- 查詢紀錄頁面 -->
+        <section id="history-tab" class="tab-content">
+            <div class="history-container">
+                <button id="clearHistoryBtn" class="clear-btn">清除紀錄</button>
+                <div class="history-list" id="historyList"></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 結果彈窗 -->
+    <div id="resultModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+// 垃圾分類資料庫
+const wasteData = {
+    categories: [
+        {
+            id: 'recyclable',
+            name: '可回收垃圾',
+            icon: '♻️',
+            color: '#4CAF50',
+            description: '可以進行回收利用的垃圾',
+            items: [
+                {name: '寶特瓶', category: '可回收垃圾', tips: '清空、壓扁、去標籤後投放'},
+                {name: '紙箱', category: '可回收垃圾', tips: '折疊、打包、保持乾燥'},
+                {name: '玻璃瓶', category: '可回收垃圾', tips: '清洗乾淨，避免破損受傷'},
+                {name: '鋁罐', category: '可回收垃圾', tips: '清空、壓扁後投放'},
+                {name: '報紙', category: '可回收垃圾', tips: '疊整齊、不要弄濕'},
+                {name: '雜誌', category: '可回收垃圾', tips: '保持乾燥、綁捆整齊'},
+                {name: '牛奶盒', category: '可回收垃圾', tips: '清洗乾淨、壓扁'},
+                {name: '舊衣物', category: '可回收垃圾', tips: '乾淨整潔的衣物可回收'},
+                {name: '塑膠容器', category: '可回收垃圾', tips: '清洗乾淨後投放'},
+                {name: '金屬罐頭', category: '可回收垃圾', tips: '清空、清洗後投放'}
+            ]
+        },
+        {
+            id: 'compostable',
+            name: '廚餘/生物垃圾',
+            icon: '🌱',
+            color: '#FF9800',
+            description: '可進行堆肥或生物分解的垃圾',
+            items: [
+                {name: '食物殘渣', category: '廚餘/生物垃圾', tips: '瀝乾、去除包裝後投放'},
+                {name: '果皮', category: '廚餘/生物垃圾', tips: '可直接投放'},
+                {name: '菜葉', category: '廚餘/生物垃圾', tips: '瀝乾水分後投放'},
+                {name: '骨頭', category: '廚餘/生物垃圾', tips: '放在廚餘桶中'},
+                {name: '茶葉渣', category: '廚餘/生物垃圾', tips: '瀝乾後投放'},
+                {name: '咖啡渣', category: '廚餘/生物垃圾', tips: '完全瀝乾後投放'},
+                {name: '落葉', category: '廚餘/生物垃圾', tips: '可投入生物垃圾'},
+                {name: '花朵', category: '廚餘/生物垃圾', tips: '謝謝的花朵可投放'},
+                {name: '玉米芯', category: '廚餘/生物垃圾', tips: '可投入廚餘桶'},
+                {name: '蛋殼', category: '廚餘/生物垃圾', tips: '洗淨後可投放'}
+            ]
+        },
+        {
+            id: 'general',
+            name: '一般垃圾',
+            icon: '🗑️',
+            color: '#2196F3',
+            description: '無法回收或堆肥的垃圾',
+            items: [
+                {name: '塑膠袋', category: '一般垃圾', tips: '沒有回收標記的塑膠袋'},
+                {name: '紙尿褲', category: '一般垃圾', tips: '放入一般垃圾桶'},
+                {name: '衛生紙', category: '一般垃圾', tips: '污染的紙類屬一般垃圾'},
+                {name: '餐巾紙', category: '一般垃圾', tips: '沾污的紙類投放'},
+                {name: '膠布', category: '一般垃圾', tips: '無法回收的膠布廢料'},
+                {name: '陶瓷碟片', category: '一般垃圾', tips: '碎裂的陶瓷屬一般垃圾'},
+                {name: '貼紙', category: '一般垃圾', tips: '塑膠貼紙屬一般垃圾'},
+                {name: '鞋墊', category: '一般垃圾', tips: '磨損的鞋墊投放'},
+                {name: '玩具', category: '一般垃圾', tips: '損壞無法修復的玩具'},
+                {name: '筆芯', category: '一般垃圾', tips: '不可回收的筆芯'}
+            ]
+        },
+        {
+            id: 'hazardous',
+            name: '有害垃圾',
+            icon: '⚠️',
+            color: '#F44336',
+            description: '含有毒有害物質的垃圾，需特殊處理',
+            items: [
+                {name: '電池', category: '有害垃圾', tips: '所有類型電池都屬有害垃圾'},
+                {name: '熒光燈', category: '有害垃圾', tips: '含汞，需小心放置，避免破損'},
+                {name: '油漆桶', category: '有害垃圾', tips: '有毒物質，需密封放置'},
+                {name: '農藥瓶', category: '有害垃圾', tips: '有毒，需安全處理'},
+                {name: '醫療廢棄物', category: '有害垃圾', tips: '針頭、注射器等需特殊處理'},
+                {name: '化妝品', category: '有害垃圾', tips: '過期的化妝品含有害物質'},
+                {name: '手機', category: '有害垃圾', tips: '電子廢棄物，需回收處理'},
+                {name: '電子產品', category: '有害垃圾', tips: '廢棄的電子設備需特殊回收'},
+                {name: '清潔劑', category: '有害垃圾', tips: '化學清潔劑屬有害物質'},
+                {name: '膠水', category: '有害垃圾', tips: '化學膠水含有害成分'}
+            ]
+        }
+    ],
+    searchDatabase: [],
+    init: function() {
+        this.categories.forEach(category => {
+            category.items.forEach(item => {
+                this.searchDatabase.push({...item, categoryId: category.id, icon: category.icon, color: category.color});
+            });
+        });
+    },
+    search: function(keyword) {
+        if (!keyword) return [];
+        return this.searchDatabase.filter(item => item.name.includes(keyword) || item.tips.includes(keyword));
+    },
+    getCategoryById: function(id) {
+        return this.categories.find(cat => cat.id === id);
+    },
+    getStats: function() {
+        return {
+            totalCategories: this.categories.length,
+            totalItems: this.searchDatabase.length,
+            categories: this.categories.map(cat => ({name: cat.name, count: cat.items.length}))
+        };
+    }
+};
+
+wasteData.init();
+
+// 主應用程式邏輯
+class WasteClassificationApp {
+    constructor() {
+        this.currentTab = 'search';
+        this.history = [];
+        this.model = null;
+        this.cameraActive = false;
+        this.currentStream = null;
+        this.init();
+    }
+
+    async init() {
+        this.loadHistory();
+        this.setupEventListeners();
+        this.renderCategories();
+        this.updateHistoryDisplay();
+        await this.loadAIModel();
+    }
+
+    async loadAIModel() {
+        try {
+            console.log('加載 MobileNet 模型...');
+            this.model = await mobilenet.load();
+            console.log('模型加載成功！');
+        } catch (e) {
+            console.error('模型載入失敗:', e);
+        }
+    }
+
+    setupEventListeners() {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab));
+        });
+
+        document.getElementById('searchBtn').addEventListener('click', () => this.performSearch());
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.performSearch();
+        });
+
+        document.querySelectorAll('.quick-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.getElementById('searchInput').value = e.target.dataset.item;
+                this.performSearch();
+            });
+        });
+
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.category-card')) {
+                const categoryId = e.target.closest('.category-card').dataset.id;
+                this.showCategoryDetails(categoryId);
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.result-card')) {
+                const itemName = e.target.closest('.result-card').dataset.item;
+                this.showItemDetails(itemName);
+            }
+        });
+
+        document.querySelector('.close-modal').addEventListener('click', () => this.closeModal());
+        document.getElementById('resultModal').addEventListener('click', (e) => {
+            if (e.target.id === 'resultModal') this.closeModal();
+        });
+
+        document.getElementById('clearHistoryBtn').addEventListener('click', () => this.clearHistory());
+
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.history-delete')) {
+                const index = e.target.closest('.history-item').dataset.index;
+                this.removeHistoryItem(index);
+            }
+        });
+
+        document.getElementById('uploadBtn').addEventListener('click', () => {
+            document.getElementById('imageInput').click();
+        });
+
+        document.getElementById('imageInput').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                this.handleImageUpload(e.target.files[0]);
+            }
+        });
+
+        document.getElementById('cameraBtn').addEventListener('click', () => this.openCamera());
+        document.getElementById('captureBtn').addEventListener('click', () => this.capturePhoto());
+        document.getElementById('closeCameraBtn').addEventListener('click', () => this.closeCamera());
+        document.getElementById('clearImageBtn').addEventListener('click', () => this.clearImage());
+    }
+
+    switchTab(tabName) {
+        this.currentTab = tabName;
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.tab === tabName) btn.classList.add('active');
+        });
+
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(`${tabName}-tab`).classList.add('active');
+    }
+
+    performSearch() {
+        const keyword = document.getElementById('searchInput').value.trim();
+        if (!keyword) {
+            alert('請輸入垃圾名稱');
+            return;
+        }
+
+        const results = wasteData.search(keyword);
+        const resultsContainer = document.getElementById('searchResults');
+        
+        if (results.length === 0) {
+            resultsContainer.innerHTML = '<div class="empty-message"><p>🔍 找不到相關結果</p><p style="font-size: 12px; margin-top: 10px;">請嘗試其他關鍵詞</p></div>';
+            return;
+        }
+
+        resultsContainer.innerHTML = results.map((item) => `
+            <div class="result-card" data-item="${item.name}">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <span style="font-size: 24px;">${item.icon}</span>
+                    <div class="result-name">${item.name}</div>
+                </div>
+                <span class="result-category" style="background: ${item.color};">${item.category}</span>
+                <div class="result-description">${item.tips}</div>
+            </div>
+        `).join('');
+
+        this.addToHistory(keyword);
+    }
+
+    showCategoryDetails(categoryId) {
+        const category = wasteData.getCategoryById(categoryId);
+        if (!category) return;
+
+        const itemsList = category.items.map(item => `<li><strong>${item.name}</strong> - ${item.tips}</li>`).join('');
+
+        this.showModal(`<h2>${category.icon} ${category.name}</h2><p>${category.description}</p><p style="margin-top: 15px; font-weight: 600; color: #333;">包含物品 (${category.items.length}個)：</p><ul class="items-list">${itemsList}</ul>`);
+    }
+
+    showItemDetails(itemName) {
+        const item = wasteData.searchDatabase.find(i => i.name === itemName);
+        if (!item) return;
+
+        this.showModal(`<h2>${item.icon} ${item.name}</h2><p><strong>分類：</strong> <span style="background: ${item.color}; color: white; padding: 5px 10px; border-radius: 20px;">${item.category}</span></p><p style="margin-top: 15px;"><strong>處理方法：</strong></p><p>${item.tips}</p>`);
+        this.addToHistory(itemName);
+    }
+
+    getDetailedTips(category) {
+        const tips = {
+            '可回收垃圾': ['清空容器內的物質', '如可能，清洗乾淨', '壓扁大型物品以節省空間', '移除不可回收的部分', '檢查回收編碼確認可回收性'],
+            '廚餘/生物垃圾': ['瀝乾水分以減少重量', '移除包裝和非食品垃圾', '避免投放油膩的食物', '生物垃圾將進行堆肥處理', '定期清理容器以防異味'],
+            '一般垃圾': ['無法回收或分解的物品', '放入指定的一般垃圾桶', '確保物品不含有害物質', '一般垃圾將進行填埋處理', '請勿混入其他分類垃圾'],
+            '有害垃圾': ['需要小心妥善處理', '防止洩漏和污染環境', '使用密閉容器盛放', '查看本地有害廢物回收點', '有害垃圾需進行特殊處理']
+        };
+        return tips[category] || ['請遵循本地垃圾分類規則'];
+    }
+
+    renderCategories() {
+        const grid = document.getElementById('categoriesGrid');
+        grid.innerHTML = wasteData.categories.map(category => `<div class="category-card" data-id="${category.id}"><div class="category-icon">${category.icon}</div><div class="category-name">${category.name}</div><div class="category-count">${category.items.length} 個物品</div></div>`).join('');
+    }
+
+    showModal(content) {
+        document.getElementById('modalBody').innerHTML = content;
+        document.getElementById('resultModal').classList.add('active');
+    }
+
+    closeModal() {
+        document.getElementById('resultModal').classList.remove('active');
+    }
+
+    addToHistory(item) {
+        this.history = this.history.filter(h => h.item !== item);
+        this.history.unshift({item: item, timestamp: new Date().getTime()});
+        if (this.history.length > 50) this.history = this.history.slice(0, 50);
+        this.saveHistory();
+        this.updateHistoryDisplay();
+    }
+
+    removeHistoryItem(index) {
+        this.history.splice(parseInt(index), 1);
+        this.saveHistory();
+        this.updateHistoryDisplay();
+    }
+
+    clearHistory() {
+        if (confirm('確定要清除所有查詢歷史嗎？')) {
+            this.history = [];
+            this.saveHistory();
+            this.updateHistoryDisplay();
+        }
+    }
+
+    updateHistoryDisplay() {
+        const historyList = document.getElementById('historyList');
+        if (this.history.length === 0) {
+            historyList.innerHTML = '<div class="empty-message">暫無查詢歷史</div>';
+            return;
+        }
+
+        historyList.innerHTML = this.history.map((item, index) => {
+            const date = new Date(item.timestamp);
+            const timeStr = this.formatTime(date);
+            return `<div class="history-item" data-index="${index}"><div class="history-text"><div class="history-name">${item.item}</div><div class="history-time">${timeStr}</div></div><button class="history-delete">刪除</button></div>`;
+        }).join('');
+    }
+
+    formatTime(date) {
+        const now = new Date();
+        const diff = now - date;
+        if (diff < 60000) return '剛剛';
+        if (diff < 3600000) return `${Math.floor(diff / 60000)} 分鐘前`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小時前`;
+        if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`;
+        return date.toLocaleDateString('zh-Hant', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
+    }
+
+    saveHistory() {
+        localStorage.setItem('wasteClassificationHistory', JSON.stringify(this.history));
+    }
+
+    loadHistory() {
+        const saved = localStorage.getItem('wasteClassificationHistory');
+        if (saved) {
+            try {
+                this.history = JSON.parse(saved);
+            } catch (e) {
+                this.history = [];
+            }
+        }
+    }
+
+    // AI 功能
+    async handleImageUpload(file) {
+        try {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const img = new Image();
+                img.onload = async () => {
+                    this.displayPreview(img.src);
+                    await this.analyzeImage(img);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        } catch (error) {
+            this.showAIError('上傳圖片失敗');
+        }
+    }
+
+    displayPreview(src) {
+        document.getElementById('previewImage').src = src;
+        document.getElementById('imagePreview').style.display = 'block';
+        document.getElementById('aiResults').style.display = 'block';
+    }
+
+    clearImage() {
+        document.getElementById('imagePreview').style.display = 'none';
+        document.getElementById('aiResults').style.display = 'none';
+        document.getElementById('imageInput').value = '';
+    }
+
+    async openCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}});
+            this.currentStream = stream;
+            const video = document.getElementById('cameraVideo');
+            video.srcObject = stream;
+            document.getElementById('cameraContainer').style.display = 'block';
+            this.cameraActive = true;
+        } catch (error) {
+            this.showAIError('無法打開相機。請檢查權限。');
+        }
+    }
+
+    closeCamera() {
+        if (this.currentStream) {
+            this.currentStream.getTracks().forEach(track => track.stop());
+            this.currentStream = null;
+        }
+        document.getElementById('cameraContainer').style.display = 'none';
+        this.cameraActive = false;
+    }
+
+    async capturePhoto() {
+        try {
+            const video = document.getElementById('cameraVideo');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            const img = new Image();
+            img.onload = async () => {
+                this.displayPreview(img.src);
+                await this.analyzeImage(img);
+                this.closeCamera();
+            };
+            img.src = canvas.toDataURL();
+        } catch (error) {
+            this.showAIError('拍照失敗');
+        }
+    }
+
+    async analyzeImage(img) {
+        try {
+            if (!this.model) {
+                this.showAIError('AI 模型還未載入，請稍候...');
+                return;
+            }
+
+            document.getElementById('loadingSpinner').style.display = 'block';
+            document.getElementById('classificationResult').style.display = 'none';
+            document.getElementById('errorMessage').style.display = 'none';
+
+            const predictions = await this.model.classify(img);
+            const wasteClassification = this.mapToWasteCategory(predictions);
+            
+            document.getElementById('loadingSpinner').style.display = 'none';
+            this.displayAIResults(wasteClassification, predictions);
+        } catch (error) {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            this.showAIError('圖片分析失敗，請重試');
+        }
+    }
+
+    mapToWasteCategory(predictions) {
+        const prediction = predictions[0].className.toLowerCase();
+        const categoryMap = {
+            recyclable: ['bottle', 'can', 'cardboard', 'paper', 'glass', 'jar', 'metal', 'aluminum'],
+            compostable: ['apple', 'banana', 'orange', 'food', 'fruit', 'vegetable', 'leaf', 'plant', 'flower'],
+            hazardous: ['battery', 'light', 'electronic', 'phone', 'computer', 'lamp'],
+            general: ['plastic bag', 'diaper', 'tissue', 'ceramic', 'shoe', 'toy']
+        };
+
+        for (let category in categoryMap) {
+            if (categoryMap[category].some(keyword => prediction.includes(keyword))) {
+                return category;
+            }
+        }
+        return 'general';
+    }
+
+    displayAIResults(categoryId, predictions) {
+        document.getElementById('classificationResult').style.display = 'block';
+        const category = wasteData.getCategoryById(categoryId);
+        
+        document.getElementById('predictedCategoryName').textContent = `${category.icon} ${category.name}`;
+        document.getElementById('predictedCategoryDesc').textContent = category.description;
+        document.getElementById('recycleTips').textContent = this.getDetailedTips(category.name)[0];
+        
+        const categoryProbabilities = this.calculateCategoryProbabilities(predictions);
+        
+        let barsHTML = '';
+        categoryProbabilities.forEach(prob => {
+            const categoryData = wasteData.getCategoryById(prob.categoryId);
+            barsHTML += `<div class="probability-bar"><div class="bar-label"><span class="bar-label-name">${categoryData.name}</span><span class="bar-label-percent">${(prob.score * 100).toFixed(1)}%</span></div><div class="bar-container"><div class="bar-fill" style="width: ${prob.score * 100}%; background: ${categoryData.color};">${prob.score > 0.2 ? (prob.score * 100).toFixed(0) + '%' : ''}</div></div></div>`;
+        });
+        
+        document.getElementById('probabilityBars').innerHTML = barsHTML;
+        this.addToHistory(`AI識別: ${category.name}`);
+    }
+
+    calculateCategoryProbabilities(predictions) {
+        const scores = {recyclable: 0, compostable: 0, general: 0, hazardous: 0};
+
+        predictions.slice(0, 5).forEach((pred, index) => {
+            const weight = 1 / (index + 1);
+            const className = pred.className.toLowerCase();
+            
+            if (['bottle', 'can', 'cardboard', 'paper', 'glass', 'jar', 'metal'].some(k => className.includes(k))) {
+                scores.recyclable += pred.probability * weight;
+            } else if (['food', 'fruit', 'vegetable', 'leaf', 'plant'].some(k => className.includes(k))) {
+                scores.compostable += pred.probability * weight;
+            } else if (['battery', 'light', 'electronic', 'phone', 'computer'].some(k => className.includes(k))) {
+                scores.hazardous += pred.probability * weight;
+            } else {
+                scores.general += pred.probability * weight;
+            }
+        });
+
+        const total = Object.values(scores).reduce((a, b) => a + b, 0);
+        for (let key in scores) {
+            scores[key] = Math.max(0, Math.min(1, scores[key] / (total || 1)));
+        }
+
+        return [{categoryId: 'recyclable', score: scores.recyclable}, {categoryId: 'compostable', score: scores.compostable}, {categoryId: 'hazardous', score: scores.hazardous}, {categoryId: 'general', score: scores.general}].sort((a, b) => b.score - a.score);
+    }
+
+    showAIError(message) {
+        document.getElementById('errorMessage').textContent = message;
+        document.getElementById('errorMessage').style.display = 'block';
+        document.getElementById('loadingSpinner').style.display = 'none';
+        document.getElementById('classificationResult').style.display = 'none';
+    }
+}
+
+// 應用初始化
+let app;
+document.addEventListener('DOMContentLoaded', () => {
+    app = new WasteClassificationApp();
+});
+    </script>
+</body>
+</html>
