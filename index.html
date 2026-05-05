@@ -395,7 +395,7 @@ body {
 
 .ai-controls {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 10px;
     margin-bottom: 20px;
 }
@@ -864,6 +864,10 @@ body {
                     <button id="cameraBtn" class="ai-btn camera-btn">
                         📷 開啟相機
                     </button>
+                    
+                    <button id="quickCaptureBtn" class="ai-btn quick-capture-btn">
+                        📸 快速拍照
+                    </button>
                 </div>
 
                 <!-- 相機容器 -->
@@ -1131,6 +1135,7 @@ class WasteClassificationApp {
         });
 
         document.getElementById('cameraBtn').addEventListener('click', () => this.openCamera());
+        document.getElementById('quickCaptureBtn').addEventListener('click', () => this.quickCapture());
         document.getElementById('captureBtn').addEventListener('click', () => this.capturePhoto());
         document.getElementById('closeCameraBtn').addEventListener('click', () => this.closeCamera());
         document.getElementById('clearImageBtn').addEventListener('click', () => this.clearImage());
@@ -1334,6 +1339,49 @@ class WasteClassificationApp {
         }
         document.getElementById('cameraContainer').style.display = 'none';
         this.cameraActive = false;
+    }
+
+    async quickCapture() {
+        try {
+            // 顯示加載提示
+            this.showAIError('正在開啟相機...');
+            
+            const stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}});
+            this.currentStream = stream;
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.autoplay = true;
+            video.muted = true;
+            video.playsInline = true;
+            
+            // 等待視頻準備好
+            await new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    video.play().then(resolve);
+                };
+            });
+            
+            // 創建canvas並拍照
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            // 停止相機
+            stream.getTracks().forEach(track => track.stop());
+            
+            // 處理圖片
+            const img = new Image();
+            img.onload = async () => {
+                this.displayPreview(img.src);
+                this.hideAIError();
+            };
+            img.src = canvas.toDataURL('image/jpeg');
+            
+        } catch (error) {
+            this.showAIError('拍照失敗。請檢查相機權限。');
+        }
     }
 
     async capturePhoto() {
