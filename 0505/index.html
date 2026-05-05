@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>垃圾分類助手</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- TensorFlow.js 和模型 -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- 頭部 -->
+        <header class="header">
+            <div class="header-content">
+                <h1>♻️ 垃圾分類助手</h1>
+                <p>讓我們一起做好環保</p>
+            </div>
+        </header>
+
+        <!-- 導航標籤 -->
+        <nav class="tab-navigation">
+            <button class="tab-btn active" data-tab="search">
+                🔍 搜尋分類
+            </button>
+            <button class="tab-btn" data-tab="ai-classify">
+                🤖 AI 識別
+            </button>
+            <button class="tab-btn" data-tab="categories">
+                📋 分類清單
+            </button>
+            <button class="tab-btn" data-tab="history">
+                📊 查詢紀錄
+            </button>
+        </nav>
+
+        <!-- 搜尋分類頁面 -->
+        <section id="search-tab" class="tab-content active">
+            <div class="search-container">
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    class="search-input" 
+                    placeholder="輸入垃圾名稱，例如：紙箱、寶特瓶..."
+                >
+                <button id="searchBtn" class="search-btn">搜尋</button>
+            </div>
+
+            <div class="search-results" id="searchResults"></div>
+
+            <div class="quick-search">
+                <h3>常見物品快速搜尋</h3>
+                <div class="quick-buttons">
+                    <button class="quick-btn" data-item="寶特瓶">寶特瓶</button>
+                    <button class="quick-btn" data-item="紙箱">紙箱</button>
+                    <button class="quick-btn" data-item="電池">電池</button>
+                    <button class="quick-btn" data-item="食物殘渣">食物殘渣</button>
+                    <button class="quick-btn" data-item="玻璃瓶">玻璃瓶</button>
+                    <button class="quick-btn" data-item="塑膠袋">塑膠袋</button>
+                    <button class="quick-btn" data-item="舊衣物">舊衣物</button>
+                    <button class="quick-btn" data-item="熒光燈">熒光燈</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- AI 識別頁面 -->
+        <section id="ai-classify-tab" class="tab-content">
+            <div class="ai-container">
+                <h3>📸 垃圾 AI 識別</h3>
+                <p style="font-size: 13px; color: #666; margin-bottom: 15px;">上傳圖片或使用相機拍照，AI 將自動分析垃圾分類和預測概率</p>
+                
+                <div class="ai-controls">
+                    <button id="uploadBtn" class="ai-btn upload-btn">
+                        📤 上傳圖片
+                    </button>
+                    <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                    
+                    <button id="cameraBtn" class="ai-btn camera-btn">
+                        📷 開啟相機
+                    </button>
+                </div>
+
+                <!-- 相機容器 -->
+                <div id="cameraContainer" class="camera-container" style="display: none;">
+                    <video id="cameraVideo" playsinline></video>
+                    <div class="camera-controls">
+                        <button id="captureBtn" class="btn-capture">拍照</button>
+                        <button id="closeCameraBtn" class="btn-close-camera">關閉</button>
+                    </div>
+                </div>
+
+                <!-- 圖片預覽 -->
+                <div id="imagePreview" class="image-preview" style="display: none;">
+                    <img id="previewImage" alt="預覽">
+                    <button id="clearImageBtn" class="btn-clear">清除</button>
+                </div>
+
+                <!-- AI 分析結果 -->
+                <div id="aiResults" class="ai-results" style="display: none;">
+                    <h4>🤖 AI 分析結果</h4>
+                    
+                    <!-- 加載動畫 -->
+                    <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>正在分析圖片...</p>
+                    </div>
+
+                    <!-- 分類結果 -->
+                    <div id="classificationResult" style="display: none;">
+                        <div class="predicted-category">
+                            <h5 id="predictedCategoryName"></h5>
+                            <p id="predictedCategoryDesc"></p>
+                        </div>
+
+                        <!-- 預測概率 -->
+                        <div class="prediction-bars">
+                            <h5>預測概率分析</h5>
+                            <div id="probabilityBars"></div>
+                        </div>
+
+                        <!-- 詳細信息 -->
+                        <div class="result-details">
+                            <h5>處理方法</h5>
+                            <p id="recycleTips"></p>
+                        </div>
+                    </div>
+
+                    <!-- 錯誤消息 -->
+                    <div id="errorMessage" class="error-message" style="display: none;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 分類清單頁面 -->
+        <section id="categories-tab" class="tab-content">
+            <div class="categories-grid" id="categoriesGrid"></div>
+        </section>
+
+        <!-- 查詢紀錄頁面 -->
+        <section id="history-tab" class="tab-content">
+            <div class="history-container">
+                <button id="clearHistoryBtn" class="clear-btn">清除紀錄</button>
+                <div class="history-list" id="historyList"></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 結果彈窗 -->
+    <div id="resultModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

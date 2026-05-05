@@ -1,0 +1,48 @@
+{
+  "name": "waste-classification-app",
+  "version": "1.0.0",
+  "description": "一個幫助用戶正確分類垃圾的手機應用程式",
+  "main": "index.html",
+  "scripts": {
+    "serve": "python -m http.server 8000",
+    "serve-py2": "python -m SimpleHTTPServer 8000"
+  },
+  "keywords": [
+    "垃圾分類",
+    "環保",
+    "前端應用",
+    "移動應用",
+    "廢物管理"
+  ],
+  "author": "Waste Classification App Team",
+  "license": "MIT",
+  "buildInfo": {
+    "buildDate": "2026-05-05",
+    "environment": "Pure Frontend",
+    "technologies": [
+      "HTML5",
+      "CSS3",
+      "JavaScript (ES6+)",
+      "LocalStorage API"
+    ],
+    "features": [
+      "垃圾分類搜尋",
+      "分類詳細信息",
+      "問題查詢歷史",
+      "本地數據存儲",
+      "響應式設計"
+    ]
+  },
+  "projectStructure": {
+    "index.html": "應用主頁和 HTML 結構",
+    "styles.css": "樣式表和響應式設計",
+    "app.js": "應用邏輯和事件處理",
+    "data.js": "垃圾分類數據庫",
+    "README.md": "項目文檔"
+  },
+  "classificationData": {
+    "categories": 4,
+    "items": 40,
+    "maxHistoryRecords": 50
+  }
+}
